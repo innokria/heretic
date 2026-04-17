@@ -1,4 +1,3 @@
-<img width="128" height="128" align="right" alt="Logo" src="https://github.com/user-attachments/assets/df5f2840-2f92-4991-aa57-252747d7182e" />
 
 
 
@@ -152,6 +151,82 @@ upload_folder(
 
 print("✅ DONE — Uploaded to:", HF_REPO_ID)
 ```
+
+
+## COLAB VERSION
+```
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUN_NAME="${RUN_NAME:-research_run}"
+BASE_DIR="/content/${RUN_NAME}"
+REPO_URL="${REPO_URL:-https://github.com/innokria/heretic.git}"
+REPO_DIR="${BASE_DIR}/repo"
+ARTIFACTS_REPO="${ARTIFACTS_REPO:-your-username/run-artifacts}"
+
+echo "==> Creating folders"
+mkdir -p "${BASE_DIR}/outputs"
+
+echo "==> Installing dependencies"
+python -m pip install -U pip
+python -m pip install huggingface_hub gradio
+
+echo "==> Cloning repo"
+rm -rf "${REPO_DIR}"
+git clone "${REPO_URL}" "${REPO_DIR}"
+
+echo "==> Writing example config"
+cat > "${REPO_DIR}/config.toml" <<'EOF'
+run_mode = "eval"
+device = "auto"
+notes = "Safe benchmark/eval config"
+EOF
+
+echo "==> Writing UI/debug metadata"
+cat > "${REPO_DIR}/ui_config.json" <<EOF
+{
+  "run_name": "${RUN_NAME}",
+  "repo_url": "${REPO_URL}"
+}
+EOF
+
+echo "==> Running benign command"
+cd "${REPO_DIR}"
+python --version | tee "${BASE_DIR}/run.log"
+
+echo "==> Saving outputs"
+cp "${BASE_DIR}/run.log" "${BASE_DIR}/outputs/last_run.txt"
+
+echo "==> Creating zip"
+cd /content
+zip -r "${RUN_NAME}.zip" "${RUN_NAME}"
+
+echo "Done"
+echo "Artifacts at: ${BASE_DIR}"
+
+
+from huggingface_hub import login, create_repo, upload_folder
+import os
+
+HF_TOKEN = "hf_xxx"
+RUN_NAME = "research_run"
+BASE_DIR = f"/content/{RUN_NAME}"
+REPO_ID = "your-username/run-artifacts"
+
+login(token=HF_TOKEN)
+create_repo(REPO_ID, repo_type="dataset", exist_ok=True)
+upload_folder(
+    repo_id=REPO_ID,
+    repo_type="dataset",
+    folder_path=BASE_DIR,
+    path_in_repo=RUN_NAME,
+)
+print("Uploaded artifacts to", REPO_ID)
+
+
+
+```
+
 
 <img width="650" height="715" alt="Screenshot" src="https://github.com/user-attachments/assets/d71a5efa-d6be-4705-a817-63332afb2d15" />
 
