@@ -20,6 +20,140 @@ as possible. Using Heretic does not require an understanding of transformer
 internals. In fact, anyone who knows how to run a command-line program
 can use Heretic to decensor language models.
 
+## Kaggle version
+```
+# =========================
+# 🔁 FULL HERETIC PIPELINE (GPU + bnb_4bit)
+# =========================
+
+import os
+import shutil
+from huggingface_hub import login, create_repo, upload_folder
+
+RUN_NAME = "research_run"
+BASE_DIR = f"/kaggle/working/{RUN_NAME}"
+REPO_DIR = f"{BASE_DIR}/repo"
+
+HF_REPO_ID = "rahul7star/heretic-gemma4"   # change this
+HF_TOKEN = "hf_token"                                  # or use Kaggle secret
+
+# -------------------------
+# Step 1 — Setup dirs
+# -------------------------
+os.makedirs(BASE_DIR, exist_ok=True)
+os.makedirs(f"{BASE_DIR}/outputs", exist_ok=True)
+
+# -------------------------
+# Step 2 — Install
+# -------------------------
+print("📦 Installing...")
+!pip install -q git+https://github.com/innokria/heretic.git
+!pip install -q huggingface_hub
+
+# bitsandbytes for 4-bit quantization
+!pip install -q bitsandbytes accelerate transformers
+
+# -------------------------
+# Step 3 — Check GPU
+# -------------------------
+import torch
+if not torch.cuda.is_available():
+    raise RuntimeError("❌ GPU not detected. Enable GPU in Kaggle settings.")
+
+print("✅ GPU:", torch.cuda.get_device_name(0))
+
+# -------------------------
+# Step 4 — Clone repo
+# -------------------------
+print("📥 Cloning repo...")
+!git clone https://github.com/innokria/heretic.git {REPO_DIR}
+
+# -------------------------
+# Step 5 — Create config.toml
+# -------------------------
+print("🧾 Creating config...")
+
+config = """
+dtypes = ["auto", "float16", "bfloat16"]
+
+quantization = "bnb_4bit"
+device_map = "auto"
+
+batch_size = 0
+max_batch_size = 128
+max_response_length = 100
+
+n_trials = 50
+n_startup_trials = 10
+
+system_prompt = "You are a helpful assistant."
+
+[good_prompts]
+dataset = "mlabonne/harmless_alpaca"
+split = "train[:100]"
+column = "text"
+
+[bad_prompts]
+dataset = "mlabonne/harmful_behaviors"
+split = "train[:100]"
+column = "text"
+"""
+
+with open(f"{REPO_DIR}/config.toml", "w") as f:
+    f.write(config.strip())
+
+# Optional metadata
+with open(f"{REPO_DIR}/ui_config.json", "w") as f:
+    f.write("""{
+  "quantization": "bnb_4bit",
+  "device": "gpu",
+  "model": "rahul7star/gemma-4-finetune"
+}""")
+
+# -------------------------
+# Step 6 — Run
+# -------------------------
+print("⚡ Running...")
+os.chdir(REPO_DIR)
+
+!heretic rahul7star/gemma-4-finetune | tee ../run.log
+
+# -------------------------
+# Step 7 — Save outputs
+# -------------------------
+print("📜 Saving outputs...")
+shutil.copy(f"{BASE_DIR}/run.log", f"{BASE_DIR}/outputs/last_run.txt")
+
+# -------------------------
+# Step 8 — Zip results
+# -------------------------
+print("🗜️ Zipping...")
+os.chdir("/kaggle/working")
+!zip -r {RUN_NAME}.zip {RUN_NAME}
+
+# -------------------------
+# Step 9 — Upload artifacts
+# -------------------------
+print("☁️ Uploading artifacts to Hugging Face...")
+
+login(token=HF_TOKEN)
+
+create_repo(
+    repo_id=HF_REPO_ID,
+    repo_type="model",
+    exist_ok=True
+)
+
+upload_folder(
+    repo_id=HF_REPO_ID,
+    repo_type="model",
+    folder_path=BASE_DIR,
+    path_in_repo=RUN_NAME,
+)
+
+print("✅ DONE — Uploaded to:", HF_REPO_ID)
+```
+
 <img width="650" height="715" alt="Screenshot" src="https://github.com/user-attachments/assets/d71a5efa-d6be-4705-a817-63332afb2d15" />
 
 &nbsp;
